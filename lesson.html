@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lesson — Music Club</title>
+  <link rel="stylesheet" href="main.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-functions-compat.js"></script>
+  <style>
+    .lesson-layout { display: flex; min-height: 100vh; }
+    .lesson-sidebar { width: 320px; background: white; border-right: 1px solid var(--border); position: fixed; top: 0; left: 0; height: 100vh; overflow-y: auto; z-index: 100; display: flex; flex-direction: column; }
+    .lesson-main { margin-left: 320px; flex: 1; }
+    .lesson-header { background: white; border-bottom: 1px solid var(--border); padding: 16px 32px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 50; }
+    .lesson-content { max-width: 760px; margin: 0 auto; padding: 40px 32px; }
+    .lesson-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; transition: background var(--t-fast); font-size: 0.875rem; border-bottom: 1px solid var(--border-light); }
+    .lesson-nav-item:hover { background: var(--milk); }
+    .lesson-nav-item.active { background: rgba(43,127,255,0.06); border-left: 3px solid var(--azure); }
+    .lesson-nav-item.completed .lesson-check { background: var(--success); color: white; border-color: var(--success); }
+    .lesson-check { width: 22px; height: 22px; border: 2px solid var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.625rem; flex-shrink: 0; }
+    .cb-section-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 8px; color: var(--text-primary); }
+    .quiz-option { padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--r-md); cursor: pointer; margin-bottom: 10px; transition: all var(--t-fast); font-size: 0.9375rem; }
+    .quiz-option:hover { border-color: var(--azure); background: rgba(43,127,255,0.04); }
+    .quiz-option.selected { border-color: var(--azure); background: rgba(43,127,255,0.08); }
+    .quiz-option.correct { border-color: var(--success); background: rgba(34,197,94,0.08); }
+    .quiz-option.wrong { border-color: var(--error); background: rgba(239,68,68,0.08); }
+    @media (max-width: 900px) {
+      .lesson-sidebar { display: none; }
+      .lesson-main { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-loader" id="pageLoader"><div style="text-align:center"><div style="font-size:2.5rem;margin-bottom:12px">🎵</div><div class="spinner" style="width:28px;height:28px;margin:0 auto"></div></div></div>
+
+<div class="lesson-layout">
+  <!-- Lesson Sidebar -->
+  <aside class="lesson-sidebar">
+    <div style="padding:20px 20px 16px;border-bottom:1px solid var(--border)">
+      <a href="courses.html" style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:0.875rem;margin-bottom:12px">← Back to Courses</a>
+      <div style="font-size:1rem;font-weight:700;color:var(--text-primary)" id="courseTitle">Loading...</div>
+      <div style="margin-top:10px">
+        <div class="flex justify-between t-xs t-muted mb-4"><span>Course Progress</span><span id="progressPct">0%</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div id="lessonList" style="flex:1;overflow-y:auto;padding:8px 0">
+      <div class="animate-pulse" style="padding:20px">Loading lessons...</div>
+    </div>
+  </aside>
+
+  <!-- Lesson Main -->
+  <div class="lesson-main">
+    <header class="lesson-header">
+      <div style="flex:1">
+        <div class="t-xs t-muted" id="headerCourse">Course</div>
+        <div style="font-weight:700;font-size:1rem" id="headerLesson">Select a lesson</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost btn-sm" id="prevBtn" onclick="navLesson(-1)">← Prev</button>
+        <button class="btn btn-ghost btn-sm" id="nextBtn" onclick="navLesson(1)">Next →</button>
+        <button class="btn btn-primary btn-sm" id="completeBtn" onclick="markComplete()">✓ Mark Complete</button>
+      </div>
+    </header>
+
+    <div class="lesson-content" id="lessonContent">
+      <div class="empty-state" style="padding:80px 20px">
+        <div class="empty-icon">📖</div>
+        <div class="empty-title">Select a lesson</div>
+        <div class="empty-sub">Choose a lesson from the sidebar to start learning</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<!-- Quiz Modal -->
+<div class="modal-overlay" id="quizModal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <span class="modal-title">📝 Lesson Quiz</span>
+      <button class="modal-close" onclick="closeQuiz()">✕</button>
+    </div>
+    <div class="modal-body" id="quizBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeQuiz()">Close</button>
+      <button class="btn btn-primary" id="submitQuizBtn" onclick="submitQuiz()">Submit Answers</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { AuthService } from './auth.js';
+  import { UserService, CourseService, LessonService, ContentBlockService, ProgressService, QuizService, LeaderboardService } from './db.js';
+
+  const params = new URLSearchParams(window.location.search);
+  const courseId = params.get('courseId');
+  const startLessonId = params.get('lessonId');
+
+  let currentUser, currentProfile, course, lessons = [], currentLesson = null, completedSet = new Set();
+  let quizQuestions = [], quizAnswers = {};
+
+  async function init() {
+    currentUser = await AuthService.requireAuth('./index.html');
+    if (!courseId) { window.location.href = 'courses.html'; return; }
+
+    [currentProfile, course, lessons] = await Promise.all([
+      UserService.get(currentUser.uid),
+      CourseService.get(courseId),
+      LessonService.getByCourse(courseId)
+    ]);
+
+    const progress = await ProgressService.getUserProgress(currentUser.uid);
+    completedSet = new Set(progress.filter(p => p.courseId === courseId).map(p => p.lessonId));
+
+    document.getElementById('pageLoader').classList.add('hidden');
+
+    if (!course) { window.location.href = 'courses.html'; return; }
+
+    document.getElementById('courseTitle').textContent = course.title;
+    document.getElementById('headerCourse').textContent = course.title;
+    renderLessonList();
+
+    const startId = startLessonId || (lessons.length ? lessons[0].id : null);
+    if (startId) loadLesson(startId);
+  }
+
+  function renderLessonList() {
+    const pct = lessons.length ? Math.round((completedSet.size / lessons.length) * 100) : 0;
+    document.getElementById('progressPct').textContent = `${pct}%`;
+    document.getElementById('progressFill').style.width = `${pct}%`;
+
+    document.getElementById('lessonList').innerHTML = lessons.map((l, i) => `
+      <div class="lesson-nav-item ${completedSet.has(l.id) ? 'completed' : ''} ${currentLesson?.id === l.id ? 'active' : ''}" 
+           onclick="loadLesson('${l.id}')">
+        <div class="lesson-check">${completedSet.has(l.id) ? '✓' : (i + 1)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.title}</div>
+          <div style="font-size:0.75rem;color:var(--text-muted)">${l.duration || ''}</div>
+        </div>
+        ${l.hasQuiz ? '<span style="font-size:0.75rem;color:var(--azure);font-weight:600">📝</span>' : ''}
+      </div>
+    `).join('');
+  }
+
+  window.loadLesson = async (lessonId) => {
+    currentLesson = lessons.find(l => l.id === lessonId);
+    if (!currentLesson) return;
+
+    document.getElementById('headerLesson').textContent = currentLesson.title;
+    document.getElementById('lessonContent').innerHTML = `<div style="display:flex;justify-content:center;padding:60px"><div class="spinner" style="width:36px;height:36px"></div></div>`;
+
+    const blocks = await ContentBlockService.getByLesson(lessonId);
+    renderLessonList();
+    renderContent(blocks);
+
+    // Update nav buttons
+    const idx = lessons.findIndex(l => l.id === lessonId);
+    document.getElementById('prevBtn').disabled = idx === 0;
+    document.getElementById('nextBtn').disabled = idx === lessons.length - 1;
+    document.getElementById('completeBtn').textContent = completedSet.has(lessonId) ? '✓ Completed' : '✓ Mark Complete';
+    document.getElementById('completeBtn').disabled = completedSet.has(lessonId);
+
+    if (currentLesson.hasQuiz) {
+      quizQuestions = currentLesson.quiz || [];
+    }
+  };
+
+  function renderContent(blocks) {
+    if (!blocks.length) {
+      document.getElementById('lessonContent').innerHTML = `
+        <div class="empty-state"><div class="empty-icon">📄</div><div class="empty-title">No content yet</div><div class="empty-sub">The instructor hasn't added content to this lesson yet.</div></div>
+      `;
+      return;
+    }
+
+    const html = blocks.map(block => renderBlock(block)).join('');
+    
+    let fullHtml = `
+      <div class="animate-slide-up">
+        <h1 class="cb-section-title mb-24">${currentLesson.title}</h1>
+        ${currentLesson.description ? `<p class="t-secondary mb-24">${currentLesson.description}</p>` : ''}
+        ${html}
+    `;
+
+    if (currentLesson.hasQuiz && quizQuestions.length) {
+      fullHtml += `
+        <div class="card mt-24" style="border:2px solid var(--azure);border-radius:var(--r-xl)">
+          <div class="flex items-center gap-12 mb-12">
+            <div style="font-size:2rem">📝</div>
+            <div>
+              <div style="font-weight:700;font-size:1.125rem">Lesson Quiz</div>
+              <div style="font-size:0.875rem;color:var(--text-secondary)">${quizQuestions.length} questions · Earn points!</div>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="openQuiz()">Take Quiz →</button>
+        </div>
+      `;
+    }
+    fullHtml += '</div>';
+    document.getElementById('lessonContent').innerHTML = fullHtml;
+  }
+
+  function renderBlock(block) {
+    const canView = canAccess(block.lock);
+    if (!canView) return renderLocked(block);
+
+    switch(block.type) {
+      case 'text': return `<div class="content-block cb-text"><p>${block.content || ''}</p></div>`;
+      case 'heading': return `<div class="content-block"><h2 style="font-size:1.5rem;font-weight:700;margin-bottom:8px;color:var(--text-primary)">${block.content || ''}</h2></div>`;
+      case 'image': return `
+        <div class="content-block cb-image">
+          <figure>
+            <img src="${block.url || ''}" alt="${block.caption || 'Lesson image'}" loading="lazy" style="border-radius:var(--r-lg)" />
+            ${block.caption ? `<figcaption>${block.caption}</figcaption>` : ''}
+          </figure>
+        </div>
+      `;
+      case 'table': return renderTableBlock(block);
+      case 'container': return renderContainerBlock(block);
+      case 'subcontainer': return `<div class="content-block cb-subcontainer">${block.content || ''}</div>`;
+      case 'note': return `
+        <div class="content-block" style="background:rgba(43,127,255,0.06);border-left:4px solid var(--azure);border-radius:0 var(--r-md) var(--r-md) 0;padding:16px 20px">
+          <div style="font-weight:600;color:var(--azure);font-size:0.875rem;margin-bottom:4px">📌 Note</div>
+          <p style="font-size:0.9375rem;color:var(--text-primary)">${block.content || ''}</p>
+        </div>
+      `;
+      default: return `<div class="content-block"><p>${block.content || ''}</p></div>`;
+    }
+  }
+
+  function renderTableBlock(block) {
+    if (!block.tableData) return '';
+    const { headers = [], rows = [] } = block.tableData;
+    return `
+      <div class="content-block cb-table">
+        <table>
+          <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderContainerBlock(block) {
+    return `
+      <div class="content-block cb-container">
+        ${block.title ? `<div class="cb-container-header">${block.title}</div>` : ''}
+        <div>${block.content || ''}</div>
+      </div>
+    `;
+  }
+
+  function renderLocked(block) {
+    const plan = block.lock === 'premium' ? 'Premium' : 'Course';
+    const icon = block.lock === 'premium' ? '👑' : '🔒';
+    return `
+      <div class="content-block content-locked">
+        <div class="locked-inner">${block.preview || '<p>This content is locked. Upgrade to view.</p>'}</div>
+        <div class="locked-overlay">
+          <div class="locked-icon">${icon}</div>
+          <div class="locked-label">${plan} Content</div>
+          <div class="locked-sub">Upgrade to unlock this lesson</div>
+          <a href="subscription.html" class="btn btn-orange btn-sm" style="margin-top:8px">Upgrade Now</a>
+        </div>
+      </div>
+    `;
+  }
+
+  function canAccess(lock) {
+    const plan = currentProfile.plan || 'free';
+    if (!lock || lock === 'free') return true;
+    if (lock === 'course') return plan === 'course' || plan === 'premium';
+    if (lock === 'premium') return plan === 'premium';
+    return false;
+  }
+
+  window.navLesson = (dir) => {
+    const idx = lessons.findIndex(l => l.id === currentLesson?.id);
+    const next = lessons[idx + dir];
+    if (next) loadLesson(next.id);
+  };
+
+  window.markComplete = async () => {
+    if (!currentLesson || completedSet.has(currentLesson.id)) return;
+    await ProgressService.markComplete(currentUser.uid, currentLesson.id, courseId);
+    await LeaderboardService.addPoints(currentUser.uid, currentProfile.displayName, 10);
+    completedSet.add(currentLesson.id);
+    showToast('✓ Lesson completed! +10 points', 'success');
+    document.getElementById('completeBtn').textContent = '✓ Completed';
+    document.getElementById('completeBtn').disabled = true;
+    renderLessonList();
+    
+    // Check for certificate eligibility
+    if (completedSet.size === lessons.length && currentProfile.plan === 'premium') {
+      showToast('🎖️ Course complete! Certificate available!', 'success');
+    }
+  };
+
+  // Quiz
+  window.openQuiz = () => {
+    const body = document.getElementById('quizBody');
+    body.innerHTML = quizQuestions.map((q, i) => `
+      <div style="margin-bottom:24px">
+        <div style="font-weight:700;margin-bottom:12px;font-size:0.9375rem">${i+1}. ${q.question}</div>
+        ${q.options.map((opt, j) => `
+          <div class="quiz-option" id="opt_${i}_${j}" onclick="selectOption(${i}, ${j}, '${opt}', '${q.correct}')">
+            ${String.fromCharCode(65+j)}. ${opt}
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+    quizAnswers = {};
+    document.getElementById('quizModal').classList.add('open');
+  };
+
+  window.selectOption = (qIdx, oIdx, chosen, correct) => {
+    // Clear previous selection for this question
+    quizQuestions[qIdx].options.forEach((_, j) => {
+      const el = document.getElementById(`opt_${qIdx}_${j}`);
+      el.classList.remove('selected');
+    });
+    document.getElementById(`opt_${qIdx}_${oIdx}`).classList.add('selected');
+    quizAnswers[qIdx] = { chosen, correct };
+  };
+
+  window.submitQuiz = async () => {
+    if (Object.keys(quizAnswers).length < quizQuestions.length) {
+      showToast('Please answer all questions', 'warning'); return;
+    }
+    let score = 0;
+    Object.entries(quizAnswers).forEach(([qIdx, { chosen, correct }]) => {
+      const isCorrect = chosen === correct;
+      if (isCorrect) score++;
+      quizQuestions[parseInt(qIdx)].options.forEach((opt, j) => {
+        const el = document.getElementById(`opt_${qIdx}_${j}`);
+        if (opt === correct) el.classList.add('correct');
+        else if (opt === chosen && !isCorrect) el.classList.add('wrong');
+      });
+    });
+    document.getElementById('submitQuizBtn').style.display = 'none';
+    await QuizService.submitScore(currentUser.uid, currentLesson.id, score, quizQuestions.length);
+    const pts = score * 5;
+    await LeaderboardService.addPoints(currentUser.uid, currentProfile.displayName, pts);
+    showToast(`Quiz: ${score}/${quizQuestions.length} correct! +${pts} points`, 'success');
+  };
+
+  window.closeQuiz = () => document.getElementById('quizModal').classList.remove('open');
+
+  window.showToast = (msg, type = 'info') => {
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.textContent = msg;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  };
+
+  init();
+</script>
+</body>
+</html>

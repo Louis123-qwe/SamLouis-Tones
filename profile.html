@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile — Music Club</title>
+  <link rel="stylesheet" href="main.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-functions-compat.js"></script>
+</head>
+<body>
+<div class="page-loader" id="pageLoader"><div style="text-align:center"><div style="font-size:2.5rem;margin-bottom:12px">🎵</div><div class="spinner" style="width:28px;height:28px;margin:0 auto"></div></div></div>
+
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div class="logo-mark"><div class="logo-icon">🎵</div><div class="logo-text">SamLouis<span> Tones</span></div></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <a href="dashboard.html" class="nav-item"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a href="courses.html" class="nav-item"><span class="nav-icon">📚</span> Courses</a>
+        <a href="marketplace.html" class="nav-item"><span class="nav-icon">🎼</span> Marketplace</a>
+        <a href="leaderboard.html" class="nav-item"><span class="nav-icon">🏆</span> Leaderboard</a>
+      </div>
+      <div class="nav-section">
+        <a href="subscription.html" class="nav-item"><span class="nav-icon">💎</span> Subscription</a>
+        <a href="profile.html" class="nav-item active"><span class="nav-icon">👤</span> Profile</a>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user"><div class="avatar avatar-sm" id="sidebarAvatar">?</div><div class="sidebar-user-info"><div class="sidebar-user-name" id="sidebarName">Loading...</div></div></div>
+      <button class="nav-item" onclick="handleLogout()" style="width:100%;margin-top:4px"><span class="nav-icon">🚪</span> Sign Out</button>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger btn btn-ghost btn-icon" onclick="toggleSidebar()">☰</button>
+        <h2 style="font-size:1.125rem;font-weight:700">👤 My Profile</h2>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <div style="max-width:680px;margin:0 auto">
+
+        <!-- Profile Card -->
+        <div class="card mb-20" style="border-radius:var(--r-xl)">
+          <div style="display:flex;align-items:center;gap:20px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border)">
+            <div class="avatar avatar-xl" id="profileAvatar">?</div>
+            <div>
+              <h2 id="profileName" style="font-size:1.375rem;font-weight:800">Loading...</h2>
+              <div id="profileEmail" style="color:var(--text-muted);font-size:0.9375rem;margin-top:2px"></div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <span id="profilePlan" class="badge badge-blue">Free</span>
+                <span id="profileRole" style="display:none" class="badge badge-orange">Admin</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats -->
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
+            <div style="text-align:center;padding:16px;background:var(--milk);border-radius:var(--r-lg)">
+              <div style="font-size:1.75rem;font-weight:800;color:var(--azure)" id="pLessons">0</div>
+              <div style="font-size:0.8125rem;color:var(--text-muted)">Lessons Done</div>
+            </div>
+            <div style="text-align:center;padding:16px;background:var(--milk);border-radius:var(--r-lg)">
+              <div style="font-size:1.75rem;font-weight:800;color:var(--orange)" id="pPoints">0</div>
+              <div style="font-size:0.8125rem;color:var(--text-muted)">Total Points</div>
+            </div>
+            <div style="text-align:center;padding:16px;background:var(--milk);border-radius:var(--r-lg)">
+              <div style="font-size:1.75rem;font-weight:800;color:var(--success)" id="pCerts">0</div>
+              <div style="font-size:0.8125rem;color:var(--text-muted)">Certificates</div>
+            </div>
+          </div>
+
+          <!-- Edit form -->
+          <h3 class="t-h3 mb-16">Edit Profile</h3>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="form-group">
+              <label class="form-label">Display Name</label>
+              <input type="text" id="editName" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input type="email" id="editEmail" class="form-input" disabled style="opacity:0.6;cursor:not-allowed" />
+              <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">Email cannot be changed here.</div>
+            </div>
+            <div id="profileError" class="form-error" style="display:none"></div>
+            <button class="btn btn-primary" id="saveProfileBtn" onclick="saveProfile()">
+              <span id="saveProfileText">Save Changes</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Change Password -->
+        <div class="card mb-20" style="border-radius:var(--r-xl)">
+          <h3 class="t-h3 mb-16">🔑 Change Password</h3>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="form-group">
+              <label class="form-label">New Password</label>
+              <input type="password" id="newPassword" class="form-input" placeholder="Min 6 characters" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Confirm New Password</label>
+              <input type="password" id="confirmPassword" class="form-input" placeholder="Repeat password" />
+            </div>
+            <div id="passwordError" class="form-error" style="display:none"></div>
+            <button class="btn btn-outline" id="changePassBtn" onclick="changePassword()">Update Password</button>
+          </div>
+        </div>
+
+        <!-- Danger zone -->
+        <div class="card" style="border-radius:var(--r-xl);border:1px solid rgba(239,68,68,0.2)">
+          <h3 style="color:var(--error);margin-bottom:8px">⚠️ Sign Out</h3>
+          <p class="t-secondary t-sm mb-16">Sign out of your Music Club account on this device.</p>
+          <button class="btn btn-sm" style="color:var(--error);border:1px solid var(--error)" onclick="handleLogout()">Sign Out</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<div class="modal-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+<script type="module">
+  import { AuthService } from './auth.js';
+  import { UserService } from './db.js';
+  import { auth } from './config.js';
+
+  let currentUser, currentProfile;
+
+  async function init() {
+    currentUser = await AuthService.requireAuth('index.html');
+    currentProfile = await UserService.get(currentUser.uid);
+    document.getElementById('pageLoader').classList.add('hidden');
+    renderProfile();
+  }
+
+  function renderProfile() {
+    const p = currentProfile;
+    const name = p.displayName || '?';
+    const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+    document.getElementById('profileAvatar').textContent = initials;
+    document.getElementById('sidebarAvatar').textContent = initials;
+    document.getElementById('sidebarName').textContent = name;
+    document.getElementById('profileName').textContent = name;
+    document.getElementById('profileEmail').textContent = p.email || '';
+    document.getElementById('editName').value = name;
+    document.getElementById('editEmail').value = p.email || '';
+
+    const planMap = { free:'Free', course:'Course', premium:'Premium' };
+    const planBadge = document.getElementById('profilePlan');
+    planBadge.textContent = planMap[p.plan] || 'Free';
+    planBadge.className = `badge badge-${p.plan === 'premium' ? 'premium' : p.plan === 'course' ? 'course' : 'free'}`;
+
+    if (p.role === 'admin') document.getElementById('profileRole').style.display = 'inline-flex';
+
+    document.getElementById('pLessons').textContent = (p.completedLessons || []).length;
+    document.getElementById('pPoints').textContent = (p.points || 0).toLocaleString();
+    document.getElementById('pCerts').textContent = p.certificatesEarned || 0;
+  }
+
+  window.saveProfile = async () => {
+    const name = document.getElementById('editName').value.trim();
+    const err = document.getElementById('profileError');
+    if (!name) { err.textContent = 'Name cannot be empty.'; err.style.display = 'block'; return; }
+    err.style.display = 'none';
+    document.getElementById('saveProfileBtn').disabled = true;
+    document.getElementById('saveProfileText').textContent = 'Saving...';
+    try {
+      await currentUser.updateProfile({ displayName: name });
+      await UserService.update(currentUser.uid, { displayName: name });
+      currentProfile.displayName = name;
+      renderProfile();
+      showToast('Profile updated!', 'success');
+    } catch(e) {
+      err.textContent = e.message;
+      err.style.display = 'block';
+    }
+    document.getElementById('saveProfileBtn').disabled = false;
+    document.getElementById('saveProfileText').textContent = 'Save Changes';
+  };
+
+  window.changePassword = async () => {
+    const pw = document.getElementById('newPassword').value;
+    const confirm = document.getElementById('confirmPassword').value;
+    const err = document.getElementById('passwordError');
+    if (!pw || !confirm) { err.textContent = 'Please fill both fields.'; err.style.display = 'block'; return; }
+    if (pw.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
+    if (pw !== confirm) { err.textContent = 'Passwords do not match.'; err.style.display = 'block'; return; }
+    err.style.display = 'none';
+    document.getElementById('changePassBtn').disabled = true;
+    try {
+      await currentUser.updatePassword(pw);
+      document.getElementById('newPassword').value = '';
+      document.getElementById('confirmPassword').value = '';
+      showToast('Password updated!', 'success');
+    } catch(e) {
+      err.textContent = e.message;
+      err.style.display = 'block';
+    }
+    document.getElementById('changePassBtn').disabled = false;
+  };
+
+  window.toggleSidebar = () => {
+    document.getElementById('sidebar').classList.toggle('mobile-open');
+    document.getElementById('mobileOverlay').classList.toggle('open');
+  };
+  window.handleLogout = () => AuthService.logout();
+  window.showToast = (msg, type = 'info') => {
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.textContent = msg;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  };
+
+  init();
+</script>
+</body>
+</html>

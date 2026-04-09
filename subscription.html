@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subscription — Music Club</title>
+  <link rel="stylesheet" href="main.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-functions-compat.js"></script>
+</head>
+<body>
+<div class="page-loader" id="pageLoader"><div style="text-align:center"><div style="font-size:2.5rem;margin-bottom:12px">🎵</div><div class="spinner" style="width:28px;height:28px;margin:0 auto"></div></div></div>
+
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div class="logo-mark"><div class="logo-icon">🎵</div><div class="logo-text">SamLouis<span> Tones</span></div></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <a href="dashboard.html" class="nav-item"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a href="courses.html" class="nav-item"><span class="nav-icon">📚</span> Courses</a>
+        <a href="marketplace.html" class="nav-item"><span class="nav-icon">🎼</span> Marketplace</a>
+        <a href="leaderboard.html" class="nav-item"><span class="nav-icon">🏆</span> Leaderboard</a>
+      </div>
+      <div class="nav-section">
+        <a href="subscription.html" class="nav-item active"><span class="nav-icon">💎</span> Subscription</a>
+        <a href="profile.html" class="nav-item"><span class="nav-icon">👤</span> Profile</a>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user"><div class="avatar avatar-sm" id="sidebarAvatar">?</div><div class="sidebar-user-info"><div class="sidebar-user-name" id="sidebarName">Loading...</div></div></div>
+      <button class="nav-item" onclick="handleLogout()" style="width:100%;margin-top:4px"><span class="nav-icon">🚪</span> Sign Out</button>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger btn btn-ghost btn-icon" onclick="toggleSidebar()">☰</button>
+        <h2 style="font-size:1.125rem;font-weight:700">💎 Subscription</h2>
+      </div>
+    </header>
+    <div class="page-content">
+      <!-- Current plan banner -->
+      <div id="currentPlanBanner" class="card mb-24" style="border-radius:var(--r-xl);background:var(--deep-blue);color:white">
+        <div class="flex items-center justify-between gap-16 flex-wrap">
+          <div>
+            <div style="font-size:0.875rem;opacity:0.6;margin-bottom:4px">Current Plan</div>
+            <div style="font-size:1.5rem;font-weight:800" id="currentPlanName">Free Plan</div>
+            <div style="font-size:0.875rem;opacity:0.7;margin-top:4px" id="currentPlanDesc">Upgrade to unlock more features</div>
+          </div>
+          <div style="font-size:4rem" id="currentPlanIcon">🆓</div>
+        </div>
+      </div>
+
+      <!-- Plans -->
+      <h2 class="t-h2 mb-20">Choose Your Plan</h2>
+      <div class="plan-grid">
+        <!-- Free -->
+        <div class="plan-card">
+          <div class="plan-name">Free</div>
+          <div class="plan-price">₦0 <span>/ forever</span></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><span class="check">✓</span> Access free lessons</li>
+            <li class="plan-feature"><span class="check">✓</span> Progress tracking</li>
+            <li class="plan-feature"><span class="check">✓</span> Leaderboard access</li>
+            <li class="plan-feature"><span class="cross">✗</span> Course lessons</li>
+            <li class="plan-feature"><span class="cross">✗</span> Certificates</li>
+          </ul>
+          <button class="btn btn-outline btn-block" id="freeBtn" disabled>Current Plan</button>
+        </div>
+        <!-- Course -->
+        <div class="plan-card featured">
+          <div class="plan-popular-tag">Popular</div>
+          <div class="plan-name">Course Plan</div>
+          <div class="plan-price">₦5,000 <span>/ course</span></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><span class="check">✓</span> All free features</li>
+            <li class="plan-feature"><span class="check">✓</span> Full course access</li>
+            <li class="plan-feature"><span class="check">✓</span> Quizzes & points</li>
+            <li class="plan-feature"><span class="check">✓</span> Marketplace access</li>
+            <li class="plan-feature"><span class="cross">✗</span> Certificates</li>
+          </ul>
+          <button class="btn btn-primary btn-block" onclick="subscribe('course','₦5,000')" id="courseBtn">Subscribe via WhatsApp</button>
+        </div>
+        <!-- Premium -->
+        <div class="plan-card" style="border-color:var(--orange)">
+          <div class="plan-name" style="color:var(--orange)">Premium</div>
+          <div class="plan-price">₦15,000 <span>/ month</span></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><span class="check">✓</span> All Course features</li>
+            <li class="plan-feature"><span class="check">✓</span> Premium-only content</li>
+            <li class="plan-feature"><span class="check">✓</span> Completion certificates</li>
+            <li class="plan-feature"><span class="check">✓</span> WhatsApp community</li>
+            <li class="plan-feature"><span class="check">✓</span> Priority support</li>
+          </ul>
+          <button class="btn btn-orange btn-block" onclick="subscribe('premium','₦15,000/mo')" id="premiumBtn">Go Premium</button>
+        </div>
+      </div>
+
+      <!-- How it works -->
+      <div class="card mt-24" style="border-radius:var(--r-xl)">
+        <h3 class="t-h3 mb-16">How Subscription Works</h3>
+        <div class="grid grid-3 gap-16">
+          <div style="text-align:center;padding:16px">
+            <div style="font-size:2.5rem;margin-bottom:10px">1️⃣</div>
+            <div style="font-weight:700;margin-bottom:6px">Click Subscribe</div>
+            <div style="font-size:0.875rem;color:var(--text-secondary)">Select your plan and click the subscribe button to open WhatsApp</div>
+          </div>
+          <div style="text-align:center;padding:16px">
+            <div style="font-size:2.5rem;margin-bottom:10px">2️⃣</div>
+            <div style="font-weight:700;margin-bottom:6px">Make Payment</div>
+            <div style="font-size:0.875rem;color:var(--text-secondary)">Send the message to our admin and make payment via bank transfer</div>
+          </div>
+          <div style="text-align:center;padding:16px">
+            <div style="font-size:2.5rem;margin-bottom:10px">3️⃣</div>
+            <div style="font-weight:700;margin-bottom:6px">Activate Code</div>
+            <div style="font-size:0.875rem;color:var(--text-secondary)">Receive your activation code and enter it in your dashboard</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<div class="modal-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+<script type="module">
+  import { AuthService } from './auth.js';
+  import { UserService } from './db.js';
+  import { ADMIN_WHATSAPP } from './config.js';
+
+  let currentUser, currentProfile;
+
+  async function init() {
+    currentUser = await AuthService.requireAuth('../index.html');
+    currentProfile = await UserService.get(currentUser.uid);
+    document.getElementById('pageLoader').classList.add('hidden');
+    const initials = (currentProfile.displayName||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('sidebarAvatar').textContent = initials;
+    document.getElementById('sidebarName').textContent = currentProfile.displayName || '';
+    updatePlanUI();
+  }
+
+  function updatePlanUI() {
+    const plan = currentProfile.plan || 'free';
+    const plans = {
+      free: { name: 'Free Plan', desc: 'Upgrade to unlock more features', icon: '🆓' },
+      course: { name: 'Course Plan', desc: 'You have access to course content', icon: '📚' },
+      premium: { name: 'Premium Plan', desc: 'You have full premium access!', icon: '👑' }
+    };
+    const p = plans[plan];
+    document.getElementById('currentPlanName').textContent = p.name;
+    document.getElementById('currentPlanDesc').textContent = p.desc;
+    document.getElementById('currentPlanIcon').textContent = p.icon;
+
+    if (plan === 'course') {
+      document.getElementById('courseBtn').textContent = '✓ Current Plan';
+      document.getElementById('courseBtn').disabled = true;
+    }
+    if (plan === 'premium') {
+      document.getElementById('premiumBtn').textContent = '✓ Current Plan';
+      document.getElementById('premiumBtn').disabled = true;
+      document.getElementById('courseBtn').disabled = true;
+    }
+    if (plan !== 'free') {
+      document.getElementById('freeBtn').textContent = plan === 'free' ? 'Current Plan' : 'Downgrading not available';
+    }
+  }
+
+  window.subscribe = (plan, price) => {
+    const msg = encodeURIComponent(
+      `Hello! I'd like to subscribe to the ${plan === 'course' ? 'Course Plan' : 'Premium Plan'} on Music Club.\n\nPlan: ${plan === 'course' ? 'Course' : 'Premium'}\nPrice: ${price}\nEmail: ${currentProfile.email}\nName: ${currentProfile.displayName}\n\nPlease send me the payment details and activation code after payment.`
+    );
+    window.open(`https://wa.me/${ADMIN_WHATSAPP}?text=${msg}`, '_blank');
+  };
+
+  window.toggleSidebar = () => {
+    document.getElementById('sidebar').classList.toggle('mobile-open');
+    document.getElementById('mobileOverlay').classList.toggle('open');
+  };
+  window.handleLogout = () => AuthService.logout();
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Courses — Music Club</title>
+  <link rel="stylesheet" href="main.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-functions-compat.js"></script>
+  <style>
+    .course-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+    .course-card { background: white; border-radius: var(--r-xl); overflow: hidden; border: 1px solid var(--border-light); box-shadow: var(--shadow-sm); transition: all var(--t-normal); cursor: pointer; }
+    .course-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+    .course-thumb { height: 160px; background: linear-gradient(135deg, var(--deep-blue), var(--deep-blue-2)); display: flex; align-items: center; justify-content: center; font-size: 4rem; position: relative; }
+    .course-thumb img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+    .course-body { padding: 20px; }
+    .course-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .course-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; line-height: 1.3; }
+    .course-desc { font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .course-footer { display: flex; align-items: center; justify-content: space-between; }
+    .lesson-count { font-size: 0.8125rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }
+  </style>
+</head>
+<body>
+<div class="page-loader" id="pageLoader"><div style="text-align:center"><div style="font-size:2.5rem;margin-bottom:12px">🎵</div><div class="spinner" style="width:28px;height:28px;margin:0 auto"></div></div></div>
+
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div class="logo-mark"><div class="logo-icon">🎵</div><div class="logo-text">SamLouis<span> Tones</span></div></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-label">Main</div>
+        <a href="dashboard.html" class="nav-item"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a href="courses.html" class="nav-item active"><span class="nav-icon">📚</span> My Courses</a>
+        <a href="marketplace.html" class="nav-item"><span class="nav-icon">🎼</span> Marketplace</a>
+        <a href="leaderboard.html" class="nav-item"><span class="nav-icon">🏆</span> Leaderboard</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-label">Account</div>
+        <a href="subscription.html" class="nav-item"><span class="nav-icon">💎</span> Subscription</a>
+        <a href="profile.html" class="nav-item"><span class="nav-icon">👤</span> Profile</a>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user" id="sidebarUser"><div class="avatar avatar-sm" id="sidebarAvatar">?</div><div class="sidebar-user-info"><div class="sidebar-user-name" id="sidebarName">Loading...</div><div class="sidebar-user-plan" id="sidebarPlan">Free Plan</div></div></div>
+      <button class="nav-item" onclick="handleLogout()" style="width:100%;margin-top:4px"><span class="nav-icon">🚪</span> Sign Out</button>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger btn btn-ghost btn-icon" onclick="toggleSidebar()">☰</button>
+        <h2 style="font-size:1.125rem;font-weight:700">📚 Courses</h2>
+      </div>
+      <div class="topbar-right">
+        <span id="planLabel" class="badge badge-blue">Free</span>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <div class="flex items-center justify-between mb-24">
+        <div>
+          <h1 class="t-h2">All Courses</h1>
+          <p class="t-secondary t-sm mt-4">Learn at your own pace with structured, high-quality music education</p>
+        </div>
+      </div>
+
+      <div id="coursesGrid" class="course-grid stagger-children">
+        <!-- Courses loaded dynamically -->
+        <div class="card animate-pulse" style="height:280px"></div>
+        <div class="card animate-pulse" style="height:280px"></div>
+        <div class="card animate-pulse" style="height:280px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<div class="modal-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+<script type="module">
+  import { AuthService } from './auth.js';
+  import { UserService, CourseService, ProgressService } from './db.js';
+
+  let currentUser, currentProfile, userProgress;
+
+  async function init() {
+    currentUser = await AuthService.requireAuth('index.html');
+    [currentProfile, userProgress] = await Promise.all([
+      UserService.get(currentUser.uid),
+      ProgressService.getUserProgress(currentUser.uid)
+    ]);
+    document.getElementById('pageLoader').classList.add('hidden');
+
+    const initials = (currentProfile.displayName || '?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('sidebarAvatar').textContent = initials;
+    document.getElementById('sidebarName').textContent = currentProfile.displayName || '';
+    document.getElementById('sidebarPlan').textContent = currentProfile.plan || 'free';
+    const planEl = document.getElementById('planLabel');
+    planEl.textContent = { free:'Free', course:'Course', premium:'Premium' }[currentProfile.plan] || 'Free';
+    planEl.className = `badge badge-${currentProfile.plan === 'premium' ? 'premium' : currentProfile.plan === 'course' ? 'course' : 'free'}`;
+
+    await loadCourses();
+  }
+
+  async function loadCourses() {
+    const courses = await CourseService.getAll();
+    const completedSet = new Set(userProgress.map(p => p.lessonId));
+    const grid = document.getElementById('coursesGrid');
+
+    if (!courses.length) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:80px 20px"><div class="empty-icon">📚</div><div class="empty-title">No courses yet</div><div class="empty-sub">Courses will appear here once the admin adds them.</div></div>`;
+      return;
+    }
+
+    grid.innerHTML = courses.map(c => {
+      const pct = c.lessonCount ? Math.min(100, Math.round((completedSet.size / c.lessonCount) * 100)) : 0;
+      const lockIcon = c.requiredPlan === 'premium' ? '👑' : c.requiredPlan === 'course' ? '🔒' : '';
+      const canAccess = canAccessCourse(c.requiredPlan);
+      return `
+        <div class="course-card" onclick="openCourse('${c.id}','${c.requiredPlan || 'free'}')">
+          <div class="course-thumb">
+            ${c.thumbnailUrl ? `<img src="${c.thumbnailUrl}" alt="${c.title}" loading="lazy">` : ''}
+            <span style="position:relative;z-index:1">${c.icon || '🎵'}</span>
+            ${!canAccess ? `<div style="position:absolute;inset:0;background:rgba(10,22,40,0.5);display:flex;align-items:center;justify-content:center;font-size:2.5rem">${lockIcon}</div>` : ''}
+          </div>
+          <div class="course-body">
+            <div class="course-meta">
+              ${c.requiredPlan === 'premium' ? '<span class="badge badge-premium">👑 Premium</span>' : c.requiredPlan === 'course' ? '<span class="badge badge-course">📚 Course</span>' : '<span class="badge badge-green">✓ Free</span>'}
+              ${c.category ? `<span class="badge badge-gray">${c.category}</span>` : ''}
+            </div>
+            <div class="course-title">${c.title}</div>
+            <div class="course-desc">${c.description || ''}</div>
+            ${pct > 0 ? `
+              <div style="margin-bottom:12px">
+                <div class="flex justify-between t-xs t-muted mb-4"><span>Progress</span><span>${pct}%</span></div>
+                <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+              </div>
+            ` : ''}
+            <div class="course-footer">
+              <span class="lesson-count">📖 ${c.lessonCount || 0} lessons</span>
+              <button class="btn btn-primary btn-sm">${pct > 0 ? 'Continue' : 'Start'} →</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function canAccessCourse(requiredPlan) {
+    const plan = currentProfile.plan || 'free';
+    if (!requiredPlan || requiredPlan === 'free') return true;
+    if (requiredPlan === 'course') return plan === 'course' || plan === 'premium';
+    if (requiredPlan === 'premium') return plan === 'premium';
+    return false;
+  }
+
+  window.openCourse = (courseId, requiredPlan) => {
+    if (!canAccessCourse(requiredPlan)) {
+      window.location.href = 'subscription.html';
+      return;
+    }
+    window.location.href = `lesson.html?courseId=${courseId}`;
+  };
+
+  window.toggleSidebar = () => {
+    document.getElementById('sidebar').classList.toggle('mobile-open');
+    document.getElementById('mobileOverlay').classList.toggle('open');
+  };
+  window.handleLogout = () => AuthService.logout();
+
+  init();
+</script>
+</body>
+</html>

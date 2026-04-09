@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Music Club Platform — Learn. Create. Master.</title>
+  <link rel="stylesheet" href="main.css" />
+  <link rel="stylesheet" href="landing.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<!-- Page Loader -->
+<div class="page-loader" id="pageLoader">
+  <div style="text-align:center">
+    <div style="font-size:2.5rem; margin-bottom:12px">🎵</div>
+    <div class="spinner" style="width:28px;height:28px;margin:0 auto"></div>
+  </div>
+</div>
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <span class="modal-title" id="authModalTitle">Welcome Back</span>
+      <button class="modal-close" onclick="closeAuthModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Login Form -->
+      <div id="loginForm">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" id="loginEmail" class="form-input" placeholder="your@email.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" />
+          </div>
+          <div id="loginError" class="form-error" style="display:none"></div>
+          <button class="btn btn-primary btn-block btn-lg" id="loginBtn" onclick="handleLogin()">
+            <span id="loginBtnText">Sign In</span>
+          </button>
+        </div>
+        <p style="text-align:center;margin-top:20px;font-size:0.875rem;color:var(--text-muted)">
+          Don't have an account?
+          <a href="#" onclick="switchToSignup()" style="color:var(--azure);font-weight:600">Sign up free</a>
+        </p>
+      </div>
+      <!-- Signup Form -->
+      <div id="signupForm" style="display:none">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" id="signupName" class="form-input" placeholder="John Doe" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" id="signupEmail" class="form-input" placeholder="your@email.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="signupPassword" class="form-input" placeholder="Min 6 characters" />
+          </div>
+          <div id="signupError" class="form-error" style="display:none"></div>
+          <button class="btn btn-primary btn-block btn-lg" id="signupBtn" onclick="handleSignup()">
+            <span id="signupBtnText">Create Account</span>
+          </button>
+        </div>
+        <p style="text-align:center;margin-top:20px;font-size:0.875rem;color:var(--text-muted)">
+          Already have an account?
+          <a href="#" onclick="switchToLogin()" style="color:var(--azure);font-weight:600">Sign in</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HERO SECTION -->
+<header class="landing-nav">
+  <div class="landing-nav-inner">
+    <div class="logo-mark">
+      <div class="logo-icon">🎵</div>
+      <div class="logo-text"><span>SamLouis Tones</span></div>
+    </div>
+    <nav class="landing-links">
+      <a href="#features">Features</a>
+      <a href="#courses">Courses</a>
+      <a href="#pricing">Pricing</a>
+    </nav>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" onclick="openLogin()">Sign In</button>
+      <button class="btn btn-orange" onclick="openSignup()">Get Started</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Hero -->
+  <section class="hero-section">
+    <div class="hero-bg-orb orb-1"></div>
+    <div class="hero-bg-orb orb-2"></div>
+    <div class="hero-content animate-slide-up">
+      <span class="hero-eyebrow">🏆 Nigeria's #1 Digital Music Academy</span>
+      <h1 class="t-display" style="max-width:680px;margin:16px auto">
+        Master Music.<br/>
+        <span style="color:var(--azure)">At Your Own Pace.</span>
+      </h1>
+      <p style="font-size:1.125rem;color:var(--text-secondary);max-width:480px;margin:16px auto 32px">
+        World-class music education, professional scores, and a premium community — all in one platform.
+      </p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-orange btn-lg" onclick="openSignup()">Start Learning Free →</button>
+        <button class="btn btn-outline btn-lg" onclick="openLogin()">Sign In</button>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><span class="hero-stat-num">500+</span><span>Students</span></div>
+        <div class="hero-stat-divider"></div>
+        <div class="hero-stat"><span class="hero-stat-num">40+</span><span>Courses</span></div>
+        <div class="hero-stat-divider"></div>
+        <div class="hero-stat"><span class="hero-stat-num">200+</span><span>Lessons</span></div>
+      </div>
+    </div>
+    <!-- Floating cards -->
+    <div class="hero-floating hero-float-1 card-glass">
+      <span style="font-size:1.5rem">🎹</span>
+      <div>
+        <div style="font-weight:700;font-size:0.875rem">Piano Mastery</div>
+        <div style="font-size:0.75rem;color:var(--text-muted)">48 lessons</div>
+      </div>
+    </div>
+    <div class="hero-floating hero-float-2 card-glass">
+      <span style="font-size:1.5rem">🏅</span>
+      <div>
+        <div style="font-weight:700;font-size:0.875rem">Certificate Earned!</div>
+        <div style="font-size:0.75rem;color:var(--success)">+200 points</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="landing-section">
+    <div class="landing-section-inner">
+      <div class="section-label">Why Music Club</div>
+      <h2 class="t-h1" style="text-align:center;max-width:500px;margin:12px auto 48px">
+        Everything you need to excel in music
+      </h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📚</div>
+          <h3 class="t-h3">Structured Courses</h3>
+          <p class="t-secondary t-sm">Progressive lessons with rich content — text, images, tables, and interactive exercises.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🏆</div>
+          <h3 class="t-h3">Gamified Learning</h3>
+          <p class="t-secondary t-sm">Earn points with every quiz, climb the leaderboard, and unlock achievements.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎖️</div>
+          <h3 class="t-h3">Certificates</h3>
+          <p class="t-secondary t-sm">Complete a course as a Premium member to earn a verified certificate of completion.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎼</div>
+          <h3 class="t-h3">Score Marketplace</h3>
+          <p class="t-secondary t-sm">Download professional musical scores and scripts. New resources added weekly.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💬</div>
+          <h3 class="t-h3">Premium Community</h3>
+          <p class="t-secondary t-sm">Private WhatsApp community with direct access to instructors and fellow musicians.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📈</div>
+          <h3 class="t-h3">Progress Tracking</h3>
+          <p class="t-secondary t-sm">Visualize your learning journey, see completed lessons, and plan what's next.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section id="pricing" class="landing-section" style="background:var(--milk-2)">
+    <div class="landing-section-inner">
+      <div class="section-label">Pricing</div>
+      <h2 class="t-h1" style="text-align:center;margin:12px auto 48px">Simple, transparent plans</h2>
+      <div class="plan-grid">
+        <!-- Free -->
+        <div class="plan-card">
+          <div class="plan-name">Free</div>
+          <div class="plan-price">₦0 <span>/ forever</span></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><span class="check">✓</span> Access free lessons</li>
+            <li class="plan-feature"><span class="check">✓</span> Progress tracking</li>
+            <li class="plan-feature"><span class="check">✓</span> Leaderboard access</li>
+            <li class="plan-feature"><span class="cross">✗</span> Premium lessons</li>
+            <li class="plan-feature"><span class="cross">✗</span> Certificates</li>
+            <li class="plan-feature"><span class="cross">✗</span> Marketplace downloads</li>
+          </ul>
+          <button class="btn btn-outline btn-block" onclick="openSignup()">Get Started Free</button>
+        </div>
+        <!-- Course -->
+        <div class="plan-card featured">
+          <div class="plan-popular-tag">Popular</div>
+          <div class="plan-name">Course Plan</div>
+          <div class="plan-price">₦5,000 <span>/ course</span></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><span class="check">✓</span> All free features</li>
+            <li class="plan-feature"><span class="check">✓</span> Full course access</li>
+            <li class="plan-feature"><span class="check">✓</span> Course quizzes</li>
+            <li class="plan-feature"><span class="check">✓</span> Marketplace access</li>
+            <li class="plan-feature"><span class="cross">✗</span> Premium-only content</li>
+            <li class="plan-feature"><span class="cross">✗</span> Certificates</li>
+          </ul>
+          <button class="btn btn-primary btn-block" onclick="openSignup()">Subscribe via WhatsApp</button>
+        </div>
+        <!-- Premium -->
+        <div class="plan-card" style="border-color:var(--orange)">
+          <div class="plan-name" style="color:var(--orange)">Premium</div>
+          <div class="plan-price">₦15,000 <span>/ month</span></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><span class="check">✓</span> Everything in Course</li>
+            <li class="plan-feature"><span class="check">✓</span> All premium content</li>
+            <li class="plan-feature"><span class="check">✓</span> Certificate of completion</li>
+            <li class="plan-feature"><span class="check">✓</span> WhatsApp community</li>
+            <li class="plan-feature"><span class="check">✓</span> Priority support</li>
+            <li class="plan-feature"><span class="check">✓</span> Early access to new courses</li>
+          </ul>
+          <button class="btn btn-orange btn-block" onclick="openSignup()">Go Premium</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="landing-footer">
+  <div class="logo-mark" style="justify-content:center;margin-bottom:12px">
+    <div class="logo-icon">🎵</div>
+    <div class="logo-text">Music<span>Club</span></div>
+  </div>
+  <p style="color:var(--text-muted);font-size:0.875rem">© 2024 Music Club Platform. All rights reserved.</p>
+</footer>
+
+<div id="toast-container"></div>
+
+<script type="module">
+  import { AuthService } from './auth.js';
+
+  // Check if already logged in
+  AuthService.onAuthChange(user => {
+    document.getElementById('pageLoader').classList.add('hidden');
+    if (user) window.location.href = 'dashboard.html';
+  });
+
+  window.openLogin = () => {
+    document.getElementById('authModalTitle').textContent = 'Welcome Back';
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('signupForm').style.display = 'none';
+    document.getElementById('authModal').classList.add('open');
+  };
+  window.openSignup = () => {
+    document.getElementById('authModalTitle').textContent = 'Join Music Club';
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('signupForm').style.display = 'block';
+    document.getElementById('authModal').classList.add('open');
+  };
+  window.closeAuthModal = () => document.getElementById('authModal').classList.remove('open');
+  window.switchToSignup = () => { openSignup(); };
+  window.switchToLogin = () => { openLogin(); };
+
+  window.handleLogin = async () => {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const err = document.getElementById('loginError');
+    const btn = document.getElementById('loginBtnText');
+    if (!email || !password) { err.textContent = 'Please fill all fields.'; err.style.display='block'; return; }
+    btn.textContent = 'Signing in...';
+    document.getElementById('loginBtn').disabled = true;
+    err.style.display = 'none';
+    try {
+      await AuthService.login(email, password);
+      window.location.href = 'dashboard.html';
+    } catch(e) {
+      err.textContent = e.message.replace('Firebase: ', '').replace(/\(auth\/.*?\)\.?/, '').trim();
+      err.style.display = 'block';
+      btn.textContent = 'Sign In';
+      document.getElementById('loginBtn').disabled = false;
+    }
+  };
+
+  window.handleSignup = async () => {
+    const name = document.getElementById('signupName').value.trim();
+    const email = document.getElementById('signupEmail').value.trim();
+    const password = document.getElementById('signupPassword').value;
+    const err = document.getElementById('signupError');
+    const btn = document.getElementById('signupBtnText');
+    if (!name || !email || !password) { err.textContent = 'Please fill all fields.'; err.style.display='block'; return; }
+    if (password.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display='block'; return; }
+    btn.textContent = 'Creating account...';
+    document.getElementById('signupBtn').disabled = true;
+    err.style.display = 'none';
+    try {
+      await AuthService.signup(email, password, name);
+      window.location.href = 'pages/dashboard.html';
+    } catch(e) {
+      err.textContent = e.message.replace('Firebase: ', '').replace(/\(auth\/.*?\)\.?/, '').trim();
+      err.style.display = 'block';
+      btn.textContent = 'Create Account';
+      document.getElementById('signupBtn').disabled = false;
+    }
+  };
+
+  // Close modal on overlay click
+  document.getElementById('authModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeAuthModal();
+  });
+</script>
+</body>
+</html>

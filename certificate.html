@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Certificate — Music Club</title>
+  <link rel="stylesheet" href="main.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-functions-compat.js"></script>
+</head>
+<body>
+<div class="page-loader" id="pageLoader"><div style="text-align:center"><div style="font-size:2.5rem;margin-bottom:12px">🎵</div><div class="spinner" style="width:28px;height:28px;margin:0 auto"></div></div></div>
+
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div class="logo-mark"><div class="logo-icon">🎵</div><div class="logo-text">SamLouis<span> Tones </span></div></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <a href="dashboard.html" class="nav-item"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a href="courses.html" class="nav-item"><span class="nav-icon">📚</span> Courses</a>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user"><div class="avatar avatar-sm" id="sidebarAvatar">?</div><div class="sidebar-user-info"><div class="sidebar-user-name" id="sidebarName">Loading...</div></div></div>
+      <button class="nav-item" onclick="handleLogout()" style="width:100%;margin-top:4px"><span class="nav-icon">🚪</span> Sign Out</button>
+    </div>
+  </aside>
+  <div class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger btn btn-ghost btn-icon" onclick="toggleSidebar()">☰</button>
+        <h2 style="font-size:1.125rem;font-weight:700">🎖️ Certificate</h2>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary btn-sm" onclick="printCert()">⬇ Download</button>
+      </div>
+    </header>
+    <div class="page-content">
+      <div id="certContainer">
+        <div class="empty-state"><div class="empty-icon">🎖️</div><div class="empty-title">Loading certificate...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { AuthService } from './auth.js';
+  import { UserService, CourseService, ProgressService, LessonService } from './db.js';
+
+  const params = new URLSearchParams(window.location.search);
+  const courseId = params.get('courseId');
+
+  async function init() {
+    const currentUser = await AuthService.requireAuth('../index.html');
+    const [currentProfile, course] = await Promise.all([
+      UserService.get(currentUser.uid),
+      CourseService.get(courseId)
+    ]);
+    document.getElementById('pageLoader').classList.add('hidden');
+    const initials = (currentProfile.displayName||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('sidebarAvatar').textContent = initials;
+    document.getElementById('sidebarName').textContent = currentProfile.displayName || '';
+
+    // Check eligibility
+    if (currentProfile.plan !== 'premium') {
+      document.getElementById('certContainer').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">👑</div>
+          <div class="empty-title">Premium Required</div>
+          <div class="empty-sub">Certificates are exclusive to Premium members. Upgrade to earn yours!</div>
+          <a href="subscription.html" class="btn btn-orange mt-12">Upgrade to Premium</a>
+        </div>
+      `;
+      return;
+    }
+
+    if (!course) { document.getElementById('certContainer').innerHTML = `<div class="empty-state"><div class="empty-title">Course not found</div></div>`; return; }
+
+    const [lessons, progress] = await Promise.all([
+      LessonService.getByCourse(courseId),
+      ProgressService.getUserProgress(currentUser.uid)
+    ]);
+    const completedForCourse = progress.filter(p => p.courseId === courseId).length;
+    
+    if (completedForCourse < lessons.length) {
+      document.getElementById('certContainer').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📚</div>
+          <div class="empty-title">Course Not Complete</div>
+          <div class="empty-sub">Complete all ${lessons.length} lessons in "${course.title}" to earn your certificate. You've completed ${completedForCourse}/${lessons.length}.</div>
+          <a href="lesson.html?courseId=${courseId}" class="btn btn-primary mt-12">Continue Course</a>
+        </div>
+      `;
+      return;
+    }
+
+    const completedDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+    document.getElementById('certContainer').innerHTML = `
+      <div class="certificate" id="certificate">
+        <div class="cert-logo">🏆</div>
+        <div class="cert-title">Certificate of Completion</div>
+        <div style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:16px">This is to certify that</div>
+        <div class="cert-name">${currentProfile.displayName}</div>
+        <div style="font-size:1rem;color:var(--text-secondary);margin:8px 0">has successfully completed</div>
+        <div class="cert-course">${course.title}</div>
+        <div style="font-size:0.875rem;color:var(--text-secondary);margin-top:8px">with ${lessons.length} lessons</div>
+        <div style="width:80px;height:2px;background:linear-gradient(90deg,var(--azure),var(--orange));margin:24px auto"></div>
+        <div class="cert-date">Issued on ${completedDate}</div>
+        <div style="margin-top:20px;font-size:0.875rem;color:var(--text-muted)">Music Club Platform · Premium Member</div>
+        <div class="cert-seal">🎵</div>
+      </div>
+    `;
+  }
+
+  window.printCert = () => {
+    const cert = document.getElementById('certificate');
+    if (!cert) return;
+    const win = window.open('', '_blank');
+    win.document.write(`<html><head><title>Certificate</title><link rel="stylesheet" href="../css/main.css"/></head><body style="background:white;padding:40px">${cert.outerHTML}<script>window.onload=()=>window.print()<\/script></body></html>`);
+    win.document.close();
+  };
+
+  window.toggleSidebar = () => document.getElementById('sidebar').classList.toggle('mobile-open');
+  window.handleLogout = () => AuthService.logout();
+  init();
+</script>
+</body>
+</html>
