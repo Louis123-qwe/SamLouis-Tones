@@ -83,13 +83,16 @@
       MarketplaceService.getUserUnlocked(currentUser.uid)
     ]);
     document.getElementById('pageLoader').classList.add('hidden');
-    const initials = (currentProfile.displayName||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    
+    const name = currentProfile.displayName || 'User';
+    const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     document.getElementById('sidebarAvatar').textContent = initials;
-    document.getElementById('sidebarName').textContent = currentProfile.displayName || '';
+    document.getElementById('sidebarName').textContent = name;
+    
     loadMarketplace();
   }
 
-    async function loadMarketplace() {
+  async function loadMarketplace() {
     const items = await MarketplaceService.getAll();
     const grid = document.getElementById('marketGrid');
     
@@ -99,33 +102,38 @@
     }
 
     grid.innerHTML = items.map(item => {
-      // Check if user has access: either unlocked manually, item is free, or access is marked 'free'
-      const unlocked = unlockedItems.includes(item.id) || 
-                       item.requiredPlan === 'free' || 
-                       item.access === 'free';
+      // Access check
+      const isUnlocked = unlockedItems.includes(item.id) || 
+                         item.requiredPlan === 'free' || 
+                         item.access === 'free';
 
-      // THUMBNAIL LOGIC: Use the uploaded image if it exists, otherwise use the icon emoji
+      // Use uploaded thumbnail or fallback to emoji
       const thumbnailContent = item.thumbnailUrl 
         ? `<img src="${item.thumbnailUrl}" style="width:100%; height:100%; object-fit:cover;">`
         : item.icon || '🎵';
 
+      // Force download URL
+      // This replaces 'image/upload' with 'auto/upload' AND adds the attachment flag
+const downloadUrl = item.fileUrl 
+  ? item.fileUrl.replace('/image/upload/', '/auto/upload/fl_attachment/') 
+  : '#';
+
+
       return `
         <div class="market-card">
-          <div class="market-thumb">
-            ${thumbnailContent}
-          </div>
+          <div class="market-thumb">${thumbnailContent}</div>
           <div class="market-body">
             <div class="market-title">${item.title}</div>
             <div style="font-size:0.8125rem; color:var(--text-secondary); margin-bottom:12px; height:40px; overflow:hidden;">
               ${item.description || ''}
             </div>
-            <div class="flex items-center justify-between">
+            <div style="display:flex; align-items:center; justify-content:between;">
               <span class="market-price">
                 ${!item.price || item.price === 0 ? 'Free' : `₦${Number(item.price).toLocaleString()}`}
               </span>
               
-              ${unlocked
-                ? `<a href="${item.fileUrl || '#'}" target="_blank" class="btn btn-primary btn-sm">⬇ Download</a>`
+              ${isUnlocked
+                ? `<a href="${downloadUrl}" download="${item.title}" target="_blank" class="btn btn-primary btn-sm">⬇ Download</a>`
                 : `<button class="btn btn-orange btn-sm" onclick="requestItem('${item.id}','${item.title}','${item.price}')">🔒 Unlock</button>`
               }
             </div>
@@ -134,7 +142,6 @@
       `;
     }).join('');
   }
-
 
   window.requestItem = (id, title, price) => {
     const msg = encodeURIComponent(`Hello! I'd like to unlock "${title}" (₦${price}) on Music Club. My account: ${currentProfile.email}`);
@@ -146,7 +153,9 @@
     document.getElementById('sidebar').classList.toggle('mobile-open');
     document.getElementById('mobileOverlay').classList.toggle('open');
   };
+
   window.handleLogout = () => AuthService.logout();
+
   window.showToast = (msg, type='info') => {
     const t = document.createElement('div');
     t.className = `toast ${type}`;
@@ -154,7 +163,8 @@
     document.getElementById('toast-container').appendChild(t);
     setTimeout(() => t.remove(), 4000);
   };
+
   init();
-</script>
+  <script>
 </body>
 </html>
