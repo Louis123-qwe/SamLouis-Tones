@@ -246,7 +246,8 @@
 
 <script type="module">
   import { AuthService } from './auth.js';
-  import { UserService, NotificationService, LeaderboardService, CourseService, ProgressService } from './db.js';
+  import { UserService, NotificationService, LeaderboardService, CourseService, ProgressService, PaymentCodeService } from './db.js';
+
   import { functions } from './config.js';
 
   let currentUser = null;
@@ -356,37 +357,70 @@ function planLabel(plan) {
     return { free: '🆓 Free Plan', course: '📚 Course Plan', premium: '⭐ Premium' }[plan] || 'Free Plan';
 }
 
-  async function loadNotifications() {
-    const notifs = await NotificationService.getForUser(currentUser.uid);
-    const unread = notifs.filter(n => !n.read).length;
-    if (unread > 0) document.getElementById('notifBadge').style.display = 'block';
-    
-    const list = document.getElementById('notifList');
-    const actList = document.getElementById('activityList');
-    
-    if (!notifs.length) return;
-    
-    list.innerHTML = notifs.map(n => `
-      <div class="notif-item ${n.read ? '' : 'unread'}" onclick="markRead('${n.id}')">
-        ${!n.read ? '<div class="notif-dot"></div>' : '<div style="width:8px"></div>'}
-        <div>
-          <div class="notif-item-title">${n.title}</div>
-          <div class="notif-item-body">${n.message}</div>
-          <div class="notif-item-time">${timeAgo(n.createdAt?.toDate?.())}</div>
-        </div>
-      </div>
-    `).join('');
+    async function loadNotifications() {
+    try {
+      // 1. Fetch notifications for this specific user
+      const notifs = await NotificationService.getForUser(currentUser.uid);
+      
+      const list = document.getElementById('notifList');
+      const actList = document.getElementById('activityList');
+      const badge = document.getElementById('notifBadge');
+      
+      // Helper for icons
+      const notifIcon = (type) => ({ subscription:'💎', code:'🎟️', announcement:'📢', lesson:'📚' }[type] || '🔔');
+      
+      // Helper for time
+      const timeAgo = (date) => {
+          if (!date) return 'Recently';
+          const seconds = Math.floor((new Date() - date) / 1000);
+          if (seconds < 60) return 'just now';
+          if (seconds < 3600) return `${Math.floor(seconds/60)}m ago`;
+          if (seconds < 86400) return `${Math.floor(seconds/3600)}h ago`;
+          return `${Math.floor(seconds/86400)}d ago`;
+      };
 
-    actList.innerHTML = notifs.slice(0,5).map(n => `
-      <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light)">
-        <div style="font-size:1.25rem">${notifIcon(n.type)}</div>
-        <div>
-          <div style="font-size:0.875rem;font-weight:600">${n.title}</div>
-          <div style="font-size:0.8125rem;color:var(--text-muted)">${timeAgo(n.createdAt?.toDate?.())}</div>
-        </div>
-      </div>
-    `).join('');
+      if (!notifs || notifs.length === 0) {
+        // Keep the empty states if truly no notifications
+        return;
+      }
+
+      // 2. Handle the Notification Dropdown (Top Right)
+      const unreadCount = notifs.filter(n => !n.read).length;
+      if (badge) badge.style.display = unreadCount > 0 ? 'block' : 'none';
+      
+      if (list) {
+        list.innerHTML = notifs.map(n => `
+          <div class="notif-item ${n.read ? '' : 'unread'}" onclick="markRead('${n.id}')">
+            ${!n.read ? '<div class="notif-dot"></div>' : '<div style="width:8px"></div>'}
+            <div>
+              <div class="notif-item-title">${n.title}</div>
+              <div class="notif-item-body">${n.message}</div>
+              <div class="notif-item-time">${timeAgo(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 3. Handle the Recent Activity Panel (Main Body)
+      if (actList) {
+        actList.innerHTML = notifs.slice(0, 5).map(n => `
+          <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light);animation: fadeIn 0.5s ease;">
+            <div style="width:40px;height:40px;background:var(--milk);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.25rem;flex-shrink:0">
+              ${notifIcon(n.type)}
+            </div>
+            <div style="flex:1">
+              <div style="font-size:0.875rem;font-weight:600;color:var(--text-main)">${n.title}</div>
+              <div style="font-size:0.8125rem;color:var(--text-secondary);margin-top:2px">${n.message}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">${timeAgo(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
+            </div>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      console.error("Failed to populate activity list:", err);
+    }
   }
+
 
   function notifIcon(type) {
     const icons = { subscription:'💎', code:'🎟️', announcement:'📢', lesson:'📚' };
@@ -450,22 +484,69 @@ function planLabel(plan) {
   window.openCodeModal = () => document.getElementById('codeModal').classList.add('open');
   window.closeCodeModal = () => document.getElementById('codeModal').classList.remove('open');
   
-  window.activateCode = async () => {
-    const code = document.getElementById('activationCode').value.trim();
+    window.activateCode = async () => {
+    const codeInput = document.getElementById('activationCode').value.trim().toUpperCase();
     const err = document.getElementById('codeError');
     const btn = document.getElementById('activateBtnText');
-    if (!code) { err.textContent = 'Please enter a code.'; err.style.display = 'block'; return; }
+    
+    if (!codeInput) { 
+      err.textContent = 'Please enter a code.'; 
+      err.style.display = 'block'; 
+      return; 
+    }
+
     err.style.display = 'none';
-    btn.textContent = 'Activating...';
+    btn.textContent = 'Verifying...';
     document.getElementById('activateBtn').disabled = true;
+
     try {
-      const redeemFn = functions.httpsCallable('redeemPaymentCode');
-      const result = await redeemFn({ code, userId: currentUser.uid });
-      showToast(`🎉 ${result.data.plan} plan activated!`, 'success');
+      // 1. Search for the code in Firestore
+      const codeDoc = await PaymentCodeService.getByCode(codeInput);
+
+      // 2. Validation Checks
+      if (!codeDoc) throw new Error("This code is invalid.");
+      if (codeDoc.status === 'used') throw new Error("This code has already been redeemed.");
+      
+      // If code is assigned to someone else
+      if (codeDoc.assignedUserId && codeDoc.assignedUserId !== currentUser.uid) {
+        throw new Error("This code is not assigned to your account.");
+      }
+
+      // Check Expiry
+      if (codeDoc.expiresAt) {
+        const expiry = codeDoc.expiresAt.toDate ? codeDoc.expiresAt.toDate() : new Date(codeDoc.expiresAt);
+        if (new Date() > expiry) throw new Error("This code has expired.");
+      }
+
+      // 3. Update User Plan
+      await UserService.update(currentUser.uid, {
+        plan: codeDoc.plan,
+        planActivatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      // 4. Mark Code as Used
+      await PaymentCodeService.update(codeDoc.id, {
+        status: 'used',
+        redeemedBy: currentUser.uid,
+        redeemedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      // 5. Success Notification
+      await NotificationService.send(currentUser.uid, {
+        title: 'Plan Activated! 🎉',
+        message: `Your ${codeDoc.plan} plan is now active. Enjoy your learning!`,
+        type: 'subscription'
+      });
+
+      showToast(`🎉 ${codeDoc.plan.toUpperCase()} plan activated!`, 'success');
       closeCodeModal();
+      
+      // Reload to reflect changes
       setTimeout(() => window.location.reload(), 1500);
+
     } catch(e) {
-      err.textContent = e.message || 'Invalid or expired code.';
+      console.error(e);
+      err.textContent = e.message || 'Error activating code.';
       err.style.display = 'block';
       btn.textContent = 'Activate';
       document.getElementById('activateBtn').disabled = false;
