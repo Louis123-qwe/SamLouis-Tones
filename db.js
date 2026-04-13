@@ -235,29 +235,90 @@ export const ContentBlockService = {
 // ─── PAYMENT CODES ──────────────────────────────────────────
 
 export const PaymentCodeService = {
-  async create(data) {
-    return db.collection('paymentCodes').add({
-      code: data.code,
-      plan: data.plan,         // course | premium
-      assignedUserId: data.assignedUserId || null,
-      status: 'unused',        // unused | used
-      createdAt: FS.FieldValue.serverTimestamp(),
-      expiresAt: data.expiresAt || null,
-      createdBy: data.createdBy
-    });
+  /**
+   * Admin: Adds a new code document to Firestore.
+   */
+  async add(data) {
+    try {
+      return await db.collection('paymentCodes').add({
+        ...data,
+        status: data.status || 'unused',
+        createdAt: FS.FieldValue.serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error adding payment code:", error);
+      throw error;
+    }
   },
+
+  /**
+   * Admin: Fetches all codes for the admin management table.
+   */
   async getAll() {
-    const snap = await db.collection('paymentCodes').orderBy('createdAt', 'desc').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const snap = await db.collection('paymentCodes').orderBy('createdAt', 'desc').get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (error) {
+      console.error("Error fetching codes:", error);
+      return [];
+    }
   },
+
+  /**
+   * User/Admin: Search for a specific code string (e.g., "ABCD-1234")
+   */
   async getByCode(code) {
-    const snap = await db.collection('paymentCodes').where('code', '==', code).limit(1).get();
-    return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+    try {
+      const snap = await db.collection('paymentCodes').where('code', '==', code).limit(1).get();
+      return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+    } catch (error) {
+      console.error("Error finding code:", error);
+      return null;
+    }
   },
-  // Validate + redeem via Cloud Function (secure)
+
+  /**
+   * User/Admin: Update a code (e.g., marking it as 'used' or assigning a user)
+   */
+  async update(id, data) {
+    if (!id) throw new Error("Payment Code ID required for update.");
+    try {
+      return await db.collection('paymentCodes').doc(id).update({
+        ...data,
+        updatedAt: FS.FieldValue.serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error updating payment code:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Admin: Deletes a specific code.
+   */
+  async delete(id) {
+    if (!id) return;
+    try {
+      return await db.collection('paymentCodes').doc(id).delete();
+    } catch (error) {
+      console.error("Error deleting code:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Legacy: Redeem via Cloud Function. 
+   * Note: Only use this if you have the 'redeemPaymentCode' function 
+   * deployed in your Firebase backend.
+   */
   async redeem(code, userId) {
-    const fn = functions.httpsCallable('redeemPaymentCode');
-    return fn({ code, userId });
+    try {
+      const fn = functions.httpsCallable('redeemPaymentCode');
+      return await fn({ code, userId });
+    } catch (error) {
+      console.error("Cloud Function redemption failed:", error);
+      throw error;
+    }
   }
 };
 
@@ -386,5 +447,7 @@ export const MarketplaceService = {
 
 
 // Inside firebase/db.js
+
+// Add this to your PaymentCodeService in db.js
 
 
