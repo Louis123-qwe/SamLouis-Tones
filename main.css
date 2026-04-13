@@ -910,3 +910,45 @@ select.form-input { cursor: pointer; }
     z-index: 401 !important; 
   }
 }
+
+
+
+
+.collection-section { margin-bottom: 48px; }
+.collection-header { 
+  font-size: 1.5rem; 
+  font-weight: 800; 
+  margin-bottom: 24px; 
+  padding-bottom: 12px; 
+  border-bottom: 2px solid var(--border-light);
+  color: var(--text-main);
+}
+.sub-collection-header {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 20px 0 16px 0;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sub-collection-header::before {
+  content: '↳';
+  color: var(--orange);
+}
+
+
+.pill {
+  padding: 8px 18px;
+  background: #f0f2f5;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+}
+.pill:hover { background: #e4e6e9; }
+.pill.active { background: var(--orange); color: white; }
