@@ -246,85 +246,74 @@
 
 <script type="module">
   import { AuthService } from './auth.js';
-  import { UserService, NotificationService, LeaderboardService, CourseService, ProgressService, PaymentCodeService } from './db.js';
-
+  import { 
+    UserService, 
+    NotificationService, 
+    LeaderboardService, 
+    CourseService, 
+    ProgressService, 
+    PaymentCodeService 
+  } from './db.js';
   import { functions } from './config.js';
 
   let currentUser = null;
   let currentProfile = null;
-  let unsubNotif = null;
 
   async function init() {
-  try {
-    currentUser = await AuthService.requireAuth('index.html');
-    currentProfile = await UserService.get(currentUser.uid);
+    try {
+      currentUser = await AuthService.requireAuth('index.html');
+      currentProfile = await UserService.get(currentUser.uid);
 
-    // Self-healing: Create profile if it somehow doesn't exist
-    if (!currentProfile) {
-      console.log("Profile missing. Creating...");
-      currentProfile = {
-        uid: currentUser.uid,
-        email: currentUser.email,
-        displayName: currentUser.displayName || currentUser.email.split('@')[0],
-        plan: 'free',
-        role: 'user',
-        points: 0,
-        completedLessons: [],
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
-      await UserService.update(currentUser.uid, currentProfile);
-    }
-
-    document.getElementById('pageLoader').classList.add('hidden');
-    renderUI();
-    
-    // Load secondary data
-    loadNotifications();
-    loadLeaderboardRank();
-    loadContinueLearning();
-
-    // Listen for real-time changes
-    UserService.watch(currentUser.uid, (updatedProfile) => {
-      if (updatedProfile) {
-        currentProfile = updatedProfile;
-        renderUI();
+      if (!currentProfile) {
+        currentProfile = {
+          uid: currentUser.uid,
+          email: currentUser.email,
+          displayName: currentUser.displayName || currentUser.email.split('@')[0],
+          plan: 'free',
+          role: 'user',
+          points: 0,
+          completedLessons: [],
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await UserService.update(currentUser.uid, currentProfile);
       }
-    });
 
-  } catch (error) {
-    console.error("Dashboard init error:", error);
+      document.getElementById('pageLoader').classList.add('hidden');
+      
+      renderUI();
+      loadNotifications();
+      loadLeaderboardAndPoints(); 
+      loadContinueLearning();
+      fetchCertificates();       
+
+      UserService.watch(currentUser.uid, (updatedProfile) => {
+        if (updatedProfile) {
+          currentProfile = updatedProfile;
+          renderUI();
+        }
+      });
+
+    } catch (error) {
+      console.error("Dashboard init error:", error);
+    }
   }
-}
 
+  // ─── UI RENDERING ──────────────────────────────────────────
 
-function renderUI() {
-    // This line ensures 'p' is NEVER null, even if the database is slow
+  function renderUI() {
     const p = currentProfile || {}; 
-    
-    // Fallback chain: Database Name -> Auth Name -> Email prefix -> 'User'
-    const name = p.displayName || (currentUser ? currentUser.displayName : null) || (currentUser ? currentUser.email.split('@')[0] : 'User');
-    
+    const name = p.displayName || (currentUser ? currentUser.email.split('@')[0] : 'User');
     const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
     
-    // Update elements safely
-    const sidebarAvatar = document.getElementById('sidebarAvatar');
-    if(sidebarAvatar) sidebarAvatar.textContent = initials;
+    if(document.getElementById('sidebarAvatar')) document.getElementById('sidebarAvatar').textContent = initials;
+    if(document.getElementById('sidebarName')) document.getElementById('sidebarName').textContent = name;
+    if(document.getElementById('topbarGreeting')) document.getElementById('topbarGreeting').textContent = name.split(' ')[0];
+    if(document.getElementById('welcomeTitle')) document.getElementById('welcomeTitle').textContent = `Welcome back, ${name.split(' ')[0]}! 👋`;
 
-    const sidebarName = document.getElementById('sidebarName');
-    if(sidebarName) sidebarName.textContent = name;
-
-    const topbarGreeting = document.getElementById('topbarGreeting');
-    if(topbarGreeting) topbarGreeting.textContent = name.split(' ')[0];
-
-    const welcomeTitle = document.getElementById('welcomeTitle');
-    if(welcomeTitle) welcomeTitle.textContent = `Welcome back, ${name.split(' ')[0]}! 👋`;
-
-    // Plan and Badges
     const userPlan = p.plan || 'free';
     const planMap = { free:'Free Plan', course:'Course Plan', premium:'Premium' };
     
-    const sidebarPlan = document.getElementById('sidebarPlan');
-    if(sidebarPlan) sidebarPlan.textContent = planLabel(userPlan);
+    if(document.getElementById('sidebarPlan')) document.getElementById('sidebarPlan').textContent = planLabel(userPlan);
 
     const planBadge = document.getElementById('planBadge');
     if(planBadge) {
@@ -332,18 +321,14 @@ function renderUI() {
         planBadge.className = `badge badge-${userPlan === 'premium' ? 'premium' : userPlan === 'course' ? 'course' : 'free'}`;
     }
 
-    // Stats
     const completed = (p.completedLessons || []).length;
     document.getElementById('statLessons').textContent = completed;
-    document.getElementById('statPoints').textContent = (p.points || 0).toLocaleString();
     
     const lessonProgress = document.getElementById('lessonProgress');
     if(lessonProgress) lessonProgress.style.width = `${Math.min((completed/50)*100, 100)}%`;
 
-    // UI Toggles
     const premiumCTA = document.getElementById('premiumCTA');
     const whatsapp = document.getElementById('whatsappCommunity');
-    
     if (userPlan !== 'premium') {
       if(premiumCTA) premiumCTA.style.display = 'block';
       if(whatsapp) whatsapp.style.display = 'none';
@@ -351,40 +336,46 @@ function renderUI() {
       if(premiumCTA) premiumCTA.style.display = 'none';
       if(whatsapp) whatsapp.style.display = 'block';
     }
-}
+  }
 
-function planLabel(plan) {
-    return { free: '🆓 Free Plan', course: '📚 Course Plan', premium: '⭐ Premium' }[plan] || 'Free Plan';
-}
+  // ─── DATA FETCHING ─────────────────────────────────────────
 
-    async function loadNotifications() {
+  async function loadLeaderboardAndPoints() {
     try {
-      // 1. Fetch notifications for this specific user
-      const notifs = await NotificationService.getForUser(currentUser.uid);
+      const top = await LeaderboardService.getTop(100);
+      const myRankData = top.find(u => u.userId === currentUser.uid);
       
+      const rankEl = document.getElementById('statRank');
+      const pointsEl = document.getElementById('statPoints');
+
+      if (rankEl) rankEl.textContent = myRankData ? `#${myRankData.rank}` : '#—';
+      if (pointsEl) {
+        const pts = myRankData ? (myRankData.points || 0) : 0;
+        pointsEl.textContent = pts.toLocaleString();
+      }
+    } catch (err) { console.error("Leaderboard error:", err); }
+  }
+
+  async function fetchCertificates() {
+    try {
+      const snap = await firebase.firestore()
+        .collection('certificates')
+        .where('userId', '==', currentUser.uid)
+        .get();
+      const certEl = document.getElementById('statCerts');
+      if(certEl) certEl.textContent = snap.size || 0;
+    } catch (err) {
+      console.error("Cert error:", err);
+    }
+  }
+
+  async function loadNotifications() {
+    try {
+      const notifs = await NotificationService.getForUser(currentUser.uid);
       const list = document.getElementById('notifList');
       const actList = document.getElementById('activityList');
       const badge = document.getElementById('notifBadge');
       
-      // Helper for icons
-      const notifIcon = (type) => ({ subscription:'💎', code:'🎟️', announcement:'📢', lesson:'📚' }[type] || '🔔');
-      
-      // Helper for time
-      const timeAgo = (date) => {
-          if (!date) return 'Recently';
-          const seconds = Math.floor((new Date() - date) / 1000);
-          if (seconds < 60) return 'just now';
-          if (seconds < 3600) return `${Math.floor(seconds/60)}m ago`;
-          if (seconds < 86400) return `${Math.floor(seconds/3600)}h ago`;
-          return `${Math.floor(seconds/86400)}d ago`;
-      };
-
-      if (!notifs || notifs.length === 0) {
-        // Keep the empty states if truly no notifications
-        return;
-      }
-
-      // 2. Handle the Notification Dropdown (Top Right)
       const unreadCount = notifs.filter(n => !n.read).length;
       if (badge) badge.style.display = unreadCount > 0 ? 'block' : 'none';
       
@@ -398,39 +389,22 @@ function planLabel(plan) {
               <div class="notif-item-time">${timeAgo(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
             </div>
           </div>
-        `).join('');
+        `).join('') || '<div class="empty-state p-20 t-center">No notifications</div>';
       }
 
-      // 3. Handle the Recent Activity Panel (Main Body)
       if (actList) {
         actList.innerHTML = notifs.slice(0, 5).map(n => `
-          <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light);animation: fadeIn 0.5s ease;">
-            <div style="width:40px;height:40px;background:var(--milk);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.25rem;flex-shrink:0">
-              ${notifIcon(n.type)}
-            </div>
+          <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light)">
+            <div style="width:40px;height:40px;background:var(--milk);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.25rem">${notifIcon(n.type)}</div>
             <div style="flex:1">
-              <div style="font-size:0.875rem;font-weight:600;color:var(--text-main)">${n.title}</div>
-              <div style="font-size:0.8125rem;color:var(--text-secondary);margin-top:2px">${n.message}</div>
+              <div style="font-size:0.875rem;font-weight:600">${n.title}</div>
+              <div style="font-size:0.8125rem;color:var(--text-secondary)">${n.message}</div>
               <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">${timeAgo(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
             </div>
           </div>
         `).join('');
       }
-    } catch (err) {
-      console.error("Failed to populate activity list:", err);
-    }
-  }
-
-
-  function notifIcon(type) {
-    const icons = { subscription:'💎', code:'🎟️', announcement:'📢', lesson:'📚' };
-    return icons[type] || '🔔';
-  }
-
-  async function loadLeaderboardRank() {
-    const top = await LeaderboardService.getTop(100);
-    const myRank = top.find(u => u.userId === currentUser.uid);
-    document.getElementById('statRank').textContent = myRank ? `#${myRank.rank}` : '#—';
+    } catch (err) { console.error(err); }
   }
 
   async function loadContinueLearning() {
@@ -443,21 +417,31 @@ function planLabel(plan) {
     const html = courses.slice(0, 3).map(c => {
       const pct = c.lessonCount ? Math.min(100, Math.round((completedLessons.size / c.lessonCount) * 100)) : 0;
       return `
-        <a href="lesson.html?courseId=${c.id}" style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light);cursor:pointer;text-decoration:none;color:inherit">
-          <div style="width:44px;height:44px;background:var(--milk);border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0">${c.icon || '🎵'}</div>
-          <div style="flex:1;min-width:0">
+        <a href="lesson.html?courseId=${c.id}" style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light);text-decoration:none;color:inherit">
+          <div style="width:44px;height:44px;background:var(--milk);border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;font-size:1.5rem">${c.icon || '🎵'}</div>
+          <div style="flex:1">
             <div style="font-size:0.875rem;font-weight:600;margin-bottom:4px">${c.title}</div>
-            <div class="progress-bar" style="margin-bottom:4px"><div class="progress-fill" style="width:${pct}%"></div></div>
-            <div style="font-size:0.75rem;color:var(--text-muted)">${pct}% complete · ${c.lessonCount || 0} lessons</div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">${pct}% complete</div>
           </div>
         </a>
       `;
     }).join('');
-    container.innerHTML = html || container.innerHTML;
+    if(container && html) container.innerHTML = html;
+  }
+
+  // ─── HELPERS ───────────────────────────────────────────────
+
+  function planLabel(plan) {
+    return { free: '🆓 Free Plan', course: '📚 Course Plan', premium: '⭐ Premium' }[plan] || 'Free Plan';
+  }
+
+  function notifIcon(type) {
+    return { subscription:'💎', code:'🎟️', announcement:'📢', lesson:'📚' }[type] || '🔔';
   }
 
   function timeAgo(date) {
-    if (!date) return '';
+    if (!date) return 'Recently';
     const seconds = Math.floor((new Date() - date) / 1000);
     if (seconds < 60) return 'just now';
     if (seconds < 3600) return `${Math.floor(seconds/60)}m ago`;
@@ -465,95 +449,45 @@ function planLabel(plan) {
     return `${Math.floor(seconds/86400)}d ago`;
   }
 
-  // Notifications toggle
-  window.toggleNotifications = () => {
-    document.getElementById('notifDropdown').classList.toggle('open');
-  };
+  // ─── WINDOW ACTIONS ────────────────────────────────────────
+
+  window.toggleNotifications = () => document.getElementById('notifDropdown').classList.toggle('open');
+  
   window.markRead = async (id) => {
     await NotificationService.markRead(id);
     loadNotifications();
   };
+
   window.markAllRead = async () => {
     const notifs = await NotificationService.getForUser(currentUser.uid);
     await Promise.all(notifs.filter(n => !n.read).map(n => NotificationService.markRead(n.id)));
-    document.getElementById('notifBadge').style.display = 'none';
     loadNotifications();
   };
 
-  // Code activation
   window.openCodeModal = () => document.getElementById('codeModal').classList.add('open');
   window.closeCodeModal = () => document.getElementById('codeModal').classList.remove('open');
   
-    window.activateCode = async () => {
+  window.activateCode = async () => {
     const codeInput = document.getElementById('activationCode').value.trim().toUpperCase();
-    const err = document.getElementById('codeError');
-    const btn = document.getElementById('activateBtnText');
-    
-    if (!codeInput) { 
-      err.textContent = 'Please enter a code.'; 
-      err.style.display = 'block'; 
-      return; 
-    }
+    const btn = document.getElementById('activateBtn');
+    if (!codeInput) return;
 
-    err.style.display = 'none';
-    btn.textContent = 'Verifying...';
-    document.getElementById('activateBtn').disabled = true;
-
+    btn.disabled = true;
     try {
-      // 1. Search for the code in Firestore
       const codeDoc = await PaymentCodeService.getByCode(codeInput);
-
-      // 2. Validation Checks
-      if (!codeDoc) throw new Error("This code is invalid.");
-      if (codeDoc.status === 'used') throw new Error("This code has already been redeemed.");
+      if (!codeDoc || codeDoc.status === 'used') throw new Error("Invalid or used code.");
       
-      // If code is assigned to someone else
-      if (codeDoc.assignedUserId && codeDoc.assignedUserId !== currentUser.uid) {
-        throw new Error("This code is not assigned to your account.");
-      }
-
-      // Check Expiry
-      if (codeDoc.expiresAt) {
-        const expiry = codeDoc.expiresAt.toDate ? codeDoc.expiresAt.toDate() : new Date(codeDoc.expiresAt);
-        if (new Date() > expiry) throw new Error("This code has expired.");
-      }
-
-      // 3. Update User Plan
-      await UserService.update(currentUser.uid, {
-        plan: codeDoc.plan,
-        planActivatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      // 4. Mark Code as Used
-      await PaymentCodeService.update(codeDoc.id, {
-        status: 'used',
-        redeemedBy: currentUser.uid,
-        redeemedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      // 5. Success Notification
-      await NotificationService.send(currentUser.uid, {
-        title: 'Plan Activated! 🎉',
-        message: `Your ${codeDoc.plan} plan is now active. Enjoy your learning!`,
-        type: 'subscription'
-      });
-
-      showToast(`🎉 ${codeDoc.plan.toUpperCase()} plan activated!`, 'success');
-      closeCodeModal();
+      await UserService.update(currentUser.uid, { plan: codeDoc.plan });
+      await PaymentCodeService.update(codeDoc.id, { status: 'used', redeemedBy: currentUser.uid });
       
-      // Reload to reflect changes
-      setTimeout(() => window.location.reload(), 1500);
-
+      showToast("Plan activated!", "success");
+      setTimeout(() => window.location.reload(), 1200);
     } catch(e) {
-      console.error(e);
-      err.textContent = e.message || 'Error activating code.';
-      err.style.display = 'block';
-      btn.textContent = 'Activate';
-      document.getElementById('activateBtn').disabled = false;
+      alert(e.message);
+      btn.disabled = false;
     }
   };
 
-  // Sidebar mobile
   window.toggleSidebar = () => {
     document.getElementById('sidebar').classList.toggle('mobile-open');
     document.getElementById('mobileOverlay').classList.toggle('open');
@@ -561,27 +495,27 @@ function planLabel(plan) {
 
   window.handleLogout = () => AuthService.logout();
 
-  // Toast
   window.showToast = (msg, type = 'info') => {
     const t = document.createElement('div');
     t.className = `toast ${type}`;
     t.textContent = msg;
-    document.getElementById('toast-container').appendChild(t);
-    setTimeout(() => t.remove(), 4000);
+    const container = document.getElementById('toast-container');
+    if(container) {
+      container.appendChild(t);
+      setTimeout(() => t.remove(), 4000);
+    }
   };
 
-  // Close notif on outside click
   document.addEventListener('click', e => {
     const dropdown = document.getElementById('notifDropdown');
     const btn = document.getElementById('notifBtn');
-    if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+    if (dropdown && !dropdown.contains(e.target) && btn && !btn.contains(e.target)) {
       dropdown.classList.remove('open');
     }
   });
-  
- 
 
   init();
 </script>
+
 </body>
 </html>
